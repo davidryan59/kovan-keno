@@ -21,7 +21,7 @@ import "hardhat/console.sol";
 // The resulting uint256 has 256 bits of data, only 123 bits needed for 20 choices from 1..80
 
 
-contract YourContract {
+contract KovanKeno {
 
   enum GameStatus {CREATED, COMMITTED, CANCELLED, FUNDED, PLAYED, CLAIMED}
 
@@ -82,7 +82,7 @@ contract YourContract {
   }
 
   // Easily initialise a new game
-  function getNewKenoGame() public pure returns (KenoGame memory) {
+  function getNewKenoGame() private pure returns (KenoGame memory) {
     return KenoGame({
        status: GameStatus.CREATED,
        currentValue: 0,
