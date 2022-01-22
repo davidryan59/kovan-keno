@@ -171,7 +171,7 @@ contract KovanKeno {
     // Checks
     require(game.playerAddress == playerAddress, "Only player can cancel the game");
     require(game.status == GameStatus.CREATED, "Game must be created but not funded");
-    require(5 <= blockNum - game.blockNumCreated, "Game cannot be cancelled within 5 blocks of creation");
+    require(5 < blockNum - game.blockNumCreated, "Game cannot be cancelled within 5 blocks of creation");
     // Refund player the money
     uint256 refundAmount = game.currentValue;
     game.status = GameStatus.CANCELLED;
@@ -210,7 +210,8 @@ contract KovanKeno {
     KenoGame memory game = getGame(gameIndex);
     // Checks
     require(game.status == GameStatus.CREATED, "Game must be created but not funded");
-    require(blockNum - game.blockNumCreated < 5, "Must fund game within 5 blocks of game creation");
+    require(game.blockNumCreated < blockNum, "Must fund game in a later block to game creation");
+    require(blockNum - game.blockNumCreated <= 5, "Must fund game within 5 blocks of game creation");
     uint256 fundingNeeded = getGameFundingNeeded(gameIndex);
     require(fundingNeeded == value, "Funding amount is wrong");
     // Update game as funded
