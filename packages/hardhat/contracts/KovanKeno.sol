@@ -21,6 +21,11 @@ import "hardhat/console.sol";
 // The resulting uint256 has 256 bits of data, only 123 bits needed for 20 choices from 1..80
 
 
+uint8 constant BLOCKS_BEFORE_CANCEL = 5;
+uint8 constant BLOCKS_BEFORE_HOUSE_CLAIM = 10;
+uint8 constant BLOCKS_BEFORE_ANY_CLAIM = 255;
+
+
 contract KovanKeno {
 
   enum GameStatus {INITIALISED, CREATED, CANCELLED, FUNDED, PLAYED, CLAIMED}
@@ -162,7 +167,7 @@ contract KovanKeno {
     games[index] = game;
   }
 
-  // If game does not get funded within specified number of blocks,
+  // If game does not get funded within BLOCKS_BEFORE_CANCEL blocks,
   // player can cancel and get full refund
   function cancelGame(uint256 gameIndex) public {
     uint256 blockNum = block.number;
@@ -171,7 +176,7 @@ contract KovanKeno {
     // Checks
     require(game.playerAddress == playerAddress, "Only player can cancel the game");
     require(game.status == GameStatus.CREATED, "Game must be created but not funded");
-    require(5 < blockNum - game.blockNumCreated, "Game cannot be cancelled within 5 blocks of creation");
+    require(BLOCKS_BEFORE_CANCEL < blockNum - game.blockNumCreated, "Game cannot be cancelled yet");
     // Refund player the money
     uint256 refundAmount = game.currentValue;
     game.status = GameStatus.CANCELLED;
@@ -197,7 +202,7 @@ contract KovanKeno {
     return fundingNeeded;
   }
 
-  // House should call this to fund a game, within 5 blocks of player creating the game
+  // House should call this to fund a game, within BLOCKS_BEFORE_CANCEL blocks of player creating the game
   // Send a decent chunk of "msg.value" to fund
   // Use getGameFundingNeeded to find out how much
   // Supply a random seed houseHash that player must include to generate randomness
@@ -211,7 +216,7 @@ contract KovanKeno {
     // Checks
     require(game.status == GameStatus.CREATED, "Game must be created but not funded");
     require(game.blockNumCreated < blockNum, "Must fund game in a later block to game creation");
-    require(blockNum - game.blockNumCreated <= 5, "Must fund game within 5 blocks of game creation");
+    require(blockNum - game.blockNumCreated <= BLOCKS_BEFORE_CANCEL, "Must fund game within a few blocks of game creation");
     uint256 fundingNeeded = getGameFundingNeeded(gameIndex);
     require(fundingNeeded == value, "Funding amount is wrong");
     // Update game as funded
@@ -278,7 +283,7 @@ contract KovanKeno {
   // which can be verified using their commitHash
   // Game will either be won or lost depending on a random draw of 20 numbers from 80,
   // according to randomness generated from revealHash and houseHash
-  // Player MUST call this within 10 blocks of game being funded,
+  // Player MUST call this within BLOCKS_BEFORE_HOUSE_CLAIM blocks of game being funded,
   // otherwise house can claim all funds in the game!
   function playGame(uint256 gameIndex, bytes32 saltUsed, uint8[10] memory choices) public {
     address playerAddress = msg.sender;
@@ -352,8 +357,8 @@ contract KovanKeno {
     // Checks
     require(0 < game.currentValue, "Game has no funds left in it");
     bool claimerIsHouse = (claimerAddress == game.houseAddress);
-    bool fundedAWhileAgo = (0 < game.blockNumFunded) && (10 < blockNum - game.blockNumFunded);
-    bool createdAVeryLongTimeAgo = (0 < game.blockNumCreated) && (1000 < blockNum - game.blockNumCreated);
+    bool fundedAWhileAgo = (0 < game.blockNumFunded) && (BLOCKS_BEFORE_HOUSE_CLAIM < blockNum - game.blockNumFunded);
+    bool createdAVeryLongTimeAgo = (0 < game.blockNumCreated) && (BLOCKS_BEFORE_ANY_CLAIM < blockNum - game.blockNumCreated);
     // Who can claim remaining funds?
     // 1. House can claim immediately after player has played
     // 2. House can claim on delay after funding (e.g. if player fails to play, perhaps knowing they lose)
