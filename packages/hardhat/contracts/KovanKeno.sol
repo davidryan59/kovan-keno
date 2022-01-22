@@ -23,7 +23,7 @@ import "hardhat/console.sol";
 
 contract KovanKeno {
 
-  enum GameStatus {CREATED, COMMITTED, CANCELLED, FUNDED, PLAYED, CLAIMED}
+  enum GameStatus {INITIALISED, CREATED, CANCELLED, FUNDED, PLAYED, CLAIMED}
 
   // How much does matching k out of n numbers make per $100?
   // Rows are n (1..10), columns are k (0..10)
@@ -65,12 +65,12 @@ contract KovanKeno {
     GameStatus status; // Status of game
     uint256 currentValue; // keep track of amount in the game
 
-    uint256 blockNumCommitted; // Block number the game was committed
+    uint256 blockNumCreated; // Block number the game was created
     address playerAddress; // Address of player
     uint256 playerValue; // Amount the player bet
-    bytes32 playerCommitHash; // Commit hash of player
+    bytes32 playerCommitHash; // Commit hash of player upon creation of game
 
-    uint8 choiceCount; // between 1 and 10; number of choices (known when committing)
+    uint8 choiceCount; // between 1 and 10; number of choices (known when creating game and committing)
     uint8[10] choices; // numbers between 1 and 80; (only known after revealing)
 
     uint256 blockNumFunded; // Block number the game was funded
@@ -84,10 +84,10 @@ contract KovanKeno {
   // Easily initialise a new game
   function getNewKenoGame() private pure returns (KenoGame memory) {
     return KenoGame({
-       status: GameStatus.CREATED,
+       status: GameStatus.INITIALISED,
        currentValue: 0,
 
-       blockNumCommitted: 0,
+       blockNumCreated: 0,
        playerAddress: address(0),
        playerValue: 0,
        playerCommitHash: 0,
@@ -135,8 +135,8 @@ contract KovanKeno {
     require(choiceCount <= 10, "Maximum choices is 10");
     // Construct new game and add to contract
     KenoGame memory game = getNewKenoGame();
-    game.status = GameStatus.COMMITTED;
-    game.blockNumCommitted = blockNum;
+    game.status = GameStatus.CREATED;
+    game.blockNumCreated = blockNum;
     incrementGameValue(game, value);
     game.playerValue += value;
     game.playerAddress = playerAddress;
@@ -170,8 +170,8 @@ contract KovanKeno {
     KenoGame memory game = getGame(gameIndex);
     // Checks
     require(game.playerAddress == playerAddress, "Only player can cancel the game");
-    require(game.status == GameStatus.COMMITTED, "Game must be committed but not funded");
-    require(5 <= blockNum - game.blockNumCommitted, "Game cannot be cancelled within 5 blocks of committing");
+    require(game.status == GameStatus.CREATED, "Game must be created but not funded");
+    require(5 <= blockNum - game.blockNumCreated, "Game cannot be cancelled within 5 blocks of creation");
     // Refund player the money
     uint256 refundAmount = game.currentValue;
     game.status = GameStatus.CANCELLED;
@@ -197,11 +197,11 @@ contract KovanKeno {
     return fundingNeeded;
   }
 
-  // House should call this to fund a game, within 5 blocks of player committing the game
+  // House should call this to fund a game, within 5 blocks of player creating the game
   // Send a decent chunk of "msg.value" to fund
   // Use getGameFundingNeeded to find out how much
   // Supply a random seed houseHash that player must include to generate randomness
-  // (e.g. player does not know houseHash when committing,
+  // (e.g. player does not know houseHash when creating,
   // and house does not know playerRevealHash when funding)
   function fundGame(uint256 gameIndex, bytes32 houseHash) public payable {
     uint256 blockNum = block.number;
@@ -209,8 +209,8 @@ contract KovanKeno {
     address houseAddress = msg.sender;
     KenoGame memory game = getGame(gameIndex);
     // Checks
-    require(game.status == GameStatus.COMMITTED, "Game must be committed but not funded");
-    require(blockNum - game.blockNumCommitted < 5, "Must fund game within 5 blocks of being committed");
+    require(game.status == GameStatus.CREATED, "Game must be created but not funded");
+    require(blockNum - game.blockNumCreated < 5, "Must fund game within 5 blocks of game creation");
     uint256 fundingNeeded = getGameFundingNeeded(gameIndex);
     require(fundingNeeded == value, "Funding amount is wrong");
     // Update game as funded
@@ -352,7 +352,7 @@ contract KovanKeno {
     require(0 < game.currentValue, "Game has no funds left in it");
     bool claimerIsHouse = (claimerAddress == game.houseAddress);
     bool fundedAWhileAgo = (0 < game.blockNumFunded) && (10 < blockNum - game.blockNumFunded);
-    bool committedAVeryLongTimeAgo = (0 < game.blockNumCommitted) && (1000 < blockNum - game.blockNumCommitted);
+    bool createdAVeryLongTimeAgo = (0 < game.blockNumCreated) && (1000 < blockNum - game.blockNumCreated);
     // Who can claim remaining funds?
     // 1. House can claim immediately after player has played
     // 2. House can claim on delay after funding (e.g. if player fails to play, perhaps knowing they lose)
@@ -362,7 +362,7 @@ contract KovanKeno {
       ||
       (game.status == GameStatus.FUNDED && claimerIsHouse && fundedAWhileAgo)
       ||
-      committedAVeryLongTimeAgo
+      createdAVeryLongTimeAgo
     , "Conditions for claiming game are not met yet");
     // Allow withdrawal to claimer
     uint256 withdrawalAmount = game.currentValue;
